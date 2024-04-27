@@ -3,13 +3,11 @@ require('dotenv').config();
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
-import { logger } from './logging/logger';
 import { requestLogger } from './logging/requestLogger';
 import { checkAndReturnEnvVars } from './utils/environment';
 import { route as ollamaRouteGenerator } from './routes/ollama';
 
 const {
-  PORT,
   OLLAMA_URL,
   API_KEY,
   DEFAULT_MODEL,
@@ -29,7 +27,9 @@ app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cors(corsOptions));
-app.use(requestLogger);
+if (process.env.NODE_ENV !== 'test') {
+  app.use(requestLogger);
+}
 
 app.use(
   '/api/generate',
@@ -46,20 +46,12 @@ app.use(
 
 // Use as a health check endpoint.
 // Retuns 200 OK and no body.
-app.use('/', (_, res) => res.status(200));
+app.use('/', (_, res) => {
+  res.status(200).send();
+});
 
 app.use('*', (_, res) => {
   res.status(404).send({ error: 'Not Found' });
 });
 
-app.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`);
-});
-
-process.on('uncaughtException', (error) => {
-  logger.error(`Uncaught Exception: ${error}`, error);
-});
-
-process.on('unhandledRejection', (error) => {
-  logger.error(`Unhandled Rejection: ${error}`, error);
-});
+export default app;
