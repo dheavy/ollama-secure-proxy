@@ -10,8 +10,6 @@ import { logger } from '../logging/logger';
  * Proxy to some Ollama routes, with a similar signature and some additional security functionality.
  */
 
-const router = express.Router();
-
 export function validateApiKey(headerApiKey: string, apiKey: string) {
   if (!headerApiKey || headerApiKey !== apiKey) {
     throw new Error('Unauthorized');
@@ -56,6 +54,7 @@ export function streamResponse(
 
 export function route(props: OllamaRoutesProps) {
   const {
+    type,
     ollamaServerUrl,
     isStream,
     apiKey,
@@ -65,11 +64,10 @@ export function route(props: OllamaRoutesProps) {
     ipAllowlist,
   } = props;
 
-  return router.post('/', async (req: Request, res: Response) => {
-    // A first layer of validation happens through CORS.
-    // See the CORS middleware in app.ts for more details.
+  const router = express.Router();
 
-    // Validate the API key if it is provided in the config.
+  return router.post('/', async (req: Request, res: Response) => {
+    // Validate the API key if it is provided in the environment variables.
     try {
       if (apiKey) {
         const headerApiKey = req.headers['x-api-key'] as string;
@@ -81,10 +79,15 @@ export function route(props: OllamaRoutesProps) {
       });
     }
 
-    // Validate IP address if IP allowlist is provided in the config.
+    // Validate IP address if IP allowlist is provided in the environment variables.
     try {
       if (ipAllowlist && ipAllowlist.length > 0) {
-        const clientIp = req.ip || '';
+        // `req.ip` cannot be modified during tests, we will pull a `x-test-ip` header during them.
+        const clientIp =
+          (process.env.NODE_ENV === 'test'
+            ? (req.headers['x-test-ip'] as string)
+            : req.ip) || '';
+
         if (!ipAllowlist.includes(clientIp)) {
           throw new Error('Unauthorized');
         }
@@ -95,6 +98,9 @@ export function route(props: OllamaRoutesProps) {
       });
     }
 
+    // Another layer of validation happens through CORS.
+    // See the CORS middleware in app.ts for more details.
+
     try {
       // Build request body based on the incoming request.
       const body = buildFinalBody(req.body, isStream, {
@@ -103,7 +109,7 @@ export function route(props: OllamaRoutesProps) {
         forceModel: Boolean(forceModel),
       });
 
-      const resp = await fetch(`${ollamaServerUrl}/api/generate`, {
+      const resp = await fetch(`${ollamaServerUrl}/api/${type}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -111,10 +117,12 @@ export function route(props: OllamaRoutesProps) {
         body,
       });
 
-      if (resp.status !== 200) {
-        throw new Error(
-          `Failed to fetch response: ${resp.status}: ${await resp.text()}`
-        );
+      if (!resp || !resp.status || !resp.text) {
+        throw new Error('No response from Ollama API');
+      }
+
+      if (resp.status >= 400) {
+        throw new Error(`${resp.status}: ${await resp.text()}`);
       }
 
       // Set the response content type based on the content type of the Ollama API response.
@@ -123,15 +131,23 @@ export function route(props: OllamaRoutesProps) {
         resp.headers.get('content-type') || 'text/plain'
       );
 
+      if (!resp.body) {
+        throw new Error('No response body');
+      }
+
       // Stream the response if the isStream flag is set,
       // otherwise send the response as JSON.
-      if (resp.body) {
-        isStream ? streamResponse(res, resp.body) : res.json(await resp.json());
-      }
+      isStream ? streamResponse(res, resp.body) : res.json(await resp.json());
     } catch (error) {
       logger.error(`Failed to proxy request: ${error}`);
-      res.status(500).send({
-        error: (error as unknown as Error).message || 'Internal Server Error',
+
+      // Extract the status code from the error message possibly coming from the Ollama API.
+      const errorMessage =
+        (error as unknown as Error).message || 'Internal Server Error';
+      const statusCode = Number(errorMessage.match(/\d{3}/)?.[0] || 500);
+
+      res.status(statusCode).send({
+        error: errorMessage,
       });
     }
   });

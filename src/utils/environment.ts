@@ -1,3 +1,4 @@
+import { logger } from '../logging/logger';
 import type { Maybe } from '../types';
 
 export function checkAndReturnEnvVars() {
@@ -16,14 +17,8 @@ export function checkAndReturnEnvVars() {
     ? process.env.ALLOWED_CORS_ORIGINS.split(',')
     : undefined;
 
-  if (!OLLAMA_URL || !API_KEY) {
-    console.error('Missing required environment variables:');
-    if (!OLLAMA_URL) {
-      console.error('OLLAMA_URL missing');
-    }
-    if (!API_KEY) {
-      console.error('API_KEY missing');
-    }
+  if (!OLLAMA_URL) {
+    logger.error('OLLAMA_URL is required');
     process.exit(1);
   }
 

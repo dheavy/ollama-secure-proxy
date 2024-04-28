@@ -1,6 +1,17 @@
 export type Maybe<T> = T | undefined;
 
+export type AppProps = {
+  OLLAMA_URL: string;
+  API_KEY?: string;
+  DEFAULT_MODEL?: Maybe<string>;
+  DEFAULT_MODEL_VERSION?: Maybe<string>;
+  FORCE_MODEL?: boolean;
+  IS_STREAM: boolean;
+  ALLOWED_IPS?: Maybe<string[]>;
+  ALLOWED_CORS_ORIGINS?: Maybe<string[]>;
+};
 export type OllamaRoutesProps = {
+  type: 'generate' | 'chat' | 'tags' | 'show' | 'embeddings';
   ollamaServerUrl: string;
   isStream: boolean;
   apiKey?: string;

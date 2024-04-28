@@ -1,8 +1,29 @@
-import app from './app';
+import createApp from './app';
 import { logger } from './logging/logger';
 import { checkAndReturnEnvVars } from './utils/environment';
 
-const { PORT } = checkAndReturnEnvVars();
+const {
+  PORT,
+  OLLAMA_URL,
+  API_KEY,
+  DEFAULT_MODEL,
+  DEFAULT_MODEL_VERSION,
+  FORCE_MODEL,
+  IS_STREAM,
+  ALLOWED_IPS,
+  ALLOWED_CORS_ORIGINS,
+} = checkAndReturnEnvVars();
+
+const app = createApp({
+  OLLAMA_URL,
+  API_KEY,
+  DEFAULT_MODEL,
+  DEFAULT_MODEL_VERSION,
+  FORCE_MODEL,
+  IS_STREAM,
+  ALLOWED_IPS,
+  ALLOWED_CORS_ORIGINS,
+});
 
 const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
