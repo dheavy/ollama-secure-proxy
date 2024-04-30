@@ -4,7 +4,7 @@ import type { Maybe } from '../types';
 export function checkAndReturnEnvVars() {
   const PORT: number = parseInt(process.env.PORT || '3000');
   const OLLAMA_URL: Maybe<string> = process.env.OLLAMA_URL;
-  const API_KEY: Maybe<string> = process.env.API_KEY;
+  const TOKEN: Maybe<string> = process.env.TOKEN;
   const DEFAULT_MODEL: Maybe<string> = process.env.DEFAULT_MODEL;
   const DEFAULT_MODEL_VERSION: Maybe<string> =
     process.env.DEFAULT_MODEL_VERSION;
@@ -25,7 +25,7 @@ export function checkAndReturnEnvVars() {
   return {
     PORT,
     OLLAMA_URL,
-    API_KEY,
+    TOKEN,
     DEFAULT_MODEL,
     DEFAULT_MODEL_VERSION,
     FORCE_MODEL,

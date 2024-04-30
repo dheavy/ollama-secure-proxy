@@ -10,7 +10,7 @@ import { route as ollamaRouteGenerator } from './routes/ollama';
 export default function createApp(props: AppProps): Express {
   const {
     OLLAMA_URL,
-    API_KEY,
+    TOKEN,
     DEFAULT_MODEL,
     DEFAULT_MODEL_VERSION,
     FORCE_MODEL,
@@ -34,7 +34,6 @@ export default function createApp(props: AppProps): Express {
   const types: Array<OllamaRoutesProps['type']> = [
     'generate',
     'chat',
-    'tags',
     'show',
     'embeddings',
   ];
@@ -45,7 +44,7 @@ export default function createApp(props: AppProps): Express {
       ollamaRouteGenerator({
         type: type,
         ollamaServerUrl: OLLAMA_URL,
-        apiKey: API_KEY,
+        apiKey: TOKEN,
         defaultModel: DEFAULT_MODEL,
         defaultModelVersion: DEFAULT_MODEL_VERSION,
         forceModel: FORCE_MODEL,

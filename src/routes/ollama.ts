@@ -10,6 +10,8 @@ import { logger } from '../logging/logger';
  * Proxy to some Ollama routes, with a similar signature and some additional security functionality.
  */
 
+const TOKEN_HEADER = 'x-osp-token';
+
 export function validateApiKey(headerApiKey: string, apiKey: string) {
   if (!headerApiKey || headerApiKey !== apiKey) {
     throw new Error('Unauthorized');
@@ -70,7 +72,7 @@ export function route(props: OllamaRoutesProps) {
     // Validate the API key if it is provided in the environment variables.
     try {
       if (apiKey) {
-        const headerApiKey = req.headers['x-api-key'] as string;
+        const headerApiKey = req.headers[TOKEN_HEADER] as string;
         validateApiKey(headerApiKey, apiKey);
       }
     } catch (error) {

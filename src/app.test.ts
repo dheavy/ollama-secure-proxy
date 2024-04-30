@@ -90,7 +90,6 @@ describe('/api/*', () => {
   const routeTypes: Array<OllamaRoutesProps['type']> = [
     'generate',
     'chat',
-    'tags',
     'show',
     'embeddings',
   ];
@@ -108,12 +107,12 @@ describe('/api/*', () => {
       });
 
       it('should return 401 Unauthorized if API key is set and not provided', async () => {
-        process.env.API_KEY = 'foo';
+        process.env.TOKEN = 'foo';
 
         app = createApp({
           OLLAMA_URL: 'http://localhost:11434',
           IS_STREAM: false,
-          API_KEY: process.env.API_KEY,
+          TOKEN: process.env.TOKEN,
         });
 
         const response = await request(app).post(`/api/${routeType}`);
@@ -121,13 +120,13 @@ describe('/api/*', () => {
       });
 
       it('should return 401 Unauthorized if API key is set and provided but wrong', async () => {
-        process.env.API_KEY = 'foo';
+        process.env.TOKEN = 'foo';
         const wrongApiKey = 'not-foo';
 
         app = createApp({
           OLLAMA_URL: 'http://localhost:11434',
           IS_STREAM: false,
-          API_KEY: process.env.API_KEY,
+          TOKEN: process.env.TOKEN,
         });
 
         // Set the wrong API key in the header.
@@ -139,18 +138,18 @@ describe('/api/*', () => {
       });
 
       it('should return 200 OK if API key is set and provided correctly', async () => {
-        process.env.API_KEY = 'foo';
+        process.env.TOKEN = 'foo';
 
         app = createApp({
           OLLAMA_URL: 'http://localhost:11434',
           IS_STREAM: false,
-          API_KEY: process.env.API_KEY,
+          TOKEN: process.env.TOKEN,
         });
 
         // Set the wrong API key in the header.
         const response = await request(app)
           .post(`/api/${routeType}`)
-          .set('x-api-key', process.env.API_KEY);
+          .set('x-api-key', process.env.TOKEN);
 
         expect(response.status).toBe(200);
       });

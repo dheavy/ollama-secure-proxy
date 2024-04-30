@@ -5,7 +5,7 @@ import { checkAndReturnEnvVars } from './utils/environment';
 const {
   PORT,
   OLLAMA_URL,
-  API_KEY,
+  TOKEN,
   DEFAULT_MODEL,
   DEFAULT_MODEL_VERSION,
   FORCE_MODEL,
@@ -16,7 +16,7 @@ const {
 
 const app = createApp({
   OLLAMA_URL,
-  API_KEY,
+  TOKEN,
   DEFAULT_MODEL,
   DEFAULT_MODEL_VERSION,
   FORCE_MODEL,
