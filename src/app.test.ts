@@ -35,6 +35,14 @@ afterEach(() => {
   }
 });
 
+// Valid request bodies for each route type.
+const validBodies: Record<string, Record<string, unknown>> = {
+  generate: { model: 'llama2', prompt: 'hello' },
+  chat: { model: 'llama2', messages: [{ role: 'user', content: 'hello' }] },
+  show: { name: 'llama2' },
+  embeddings: { model: 'llama2', prompt: 'hello' },
+};
+
 describe('/', () => {
   beforeEach(() => {
     app = createApp({
@@ -102,7 +110,9 @@ describe('/api/*', () => {
           IS_STREAM: false,
         });
 
-        const response = await request(app).post(`/api/${routeType}`);
+        const response = await request(app)
+          .post(`/api/${routeType}`)
+          .send(validBodies[routeType]);
         expect(response.status).toBe(200);
       });
 
@@ -115,7 +125,9 @@ describe('/api/*', () => {
           TOKEN: process.env.TOKEN,
         });
 
-        const response = await request(app).post(`/api/${routeType}`);
+        const response = await request(app)
+          .post(`/api/${routeType}`)
+          .send(validBodies[routeType]);
         expect(response.status).toBe(401);
       });
 
@@ -132,7 +144,8 @@ describe('/api/*', () => {
         // Set the wrong API key in the header.
         const response = await request(app)
           .post(`/api/${routeType}`)
-          .set('x-api-key', wrongApiKey);
+          .set('x-osp-token', wrongApiKey)
+          .send(validBodies[routeType]);
 
         expect(response.status).toBe(401);
       });
@@ -146,10 +159,10 @@ describe('/api/*', () => {
           TOKEN: process.env.TOKEN,
         });
 
-        // Set the wrong API key in the header.
         const response = await request(app)
           .post(`/api/${routeType}`)
-          .set('x-api-key', process.env.TOKEN);
+          .set('x-osp-token', process.env.TOKEN)
+          .send(validBodies[routeType]);
 
         expect(response.status).toBe(200);
       });
@@ -163,7 +176,9 @@ describe('/api/*', () => {
           ALLOWED_IPS: process.env.ALLOWED_IPS.split(','),
         });
 
-        const response = await request(app).post(`/api/${routeType}`);
+        const response = await request(app)
+          .post(`/api/${routeType}`)
+          .send(validBodies[routeType]);
         expect(response.status).toBe(401);
       });
 
@@ -179,7 +194,8 @@ describe('/api/*', () => {
 
         const response = await request(app)
           .post(`/api/${routeType}`)
-          .set('x-test-ip', wrongIp);
+          .set('x-test-ip', wrongIp)
+          .send(validBodies[routeType]);
 
         expect(response.status).toBe(401);
       });
@@ -196,7 +212,8 @@ describe('/api/*', () => {
 
         const response = await request(app)
           .post(`/api/${routeType}`)
-          .set('x-test-ip', ip);
+          .set('x-test-ip', ip)
+          .send(validBodies[routeType]);
 
         expect(response.status).toBe(200);
       });
@@ -213,10 +230,102 @@ describe('/api/*', () => {
 
         const response = await request(app)
           .post(`/api/${routeType}`)
-          .set('Origin', wrongOrigin);
+          .set('Origin', wrongOrigin)
+          .send(validBodies[routeType]);
 
         expect(response.headers['access-control-allow-origin']).toBeUndefined();
       });
+
+      it('should return 400 Bad Request if request body is missing required fields', async () => {
+        app = createApp({
+          OLLAMA_URL: 'http://localhost:11434',
+          IS_STREAM: false,
+        });
+
+        const response = await request(app)
+          .post(`/api/${routeType}`)
+          .send({});
+
+        expect(response.status).toBe(400);
+      });
     });
+  });
+});
+
+describe('rate limiting', () => {
+  it('should return 429 when rate limit is exceeded', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+      RATE_LIMIT_WINDOW_MS: 60000,
+      RATE_LIMIT_MAX: 2,
+    });
+
+    // First two requests should succeed.
+    await request(app).get('/');
+    await request(app).get('/');
+
+    // Third request should be rate limited.
+    const response = await request(app).get('/');
+    expect(response.status).toBe(429);
+    expect(response.body.error).toMatch(/too many requests/i);
+  });
+});
+
+describe('input validation', () => {
+  it('should return 400 for generate without model', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const response = await request(app)
+      .post('/api/generate')
+      .send({ prompt: 'hello' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/model/i);
+  });
+
+  it('should return 400 for chat without messages', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const response = await request(app)
+      .post('/api/chat')
+      .send({ model: 'llama2' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/messages/i);
+  });
+
+  it('should return 400 for embeddings without prompt', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const response = await request(app)
+      .post('/api/embeddings')
+      .send({ model: 'llama2' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/prompt|input/i);
+  });
+
+  it('should return 400 for show without name or model', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const response = await request(app)
+      .post('/api/show')
+      .send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/name|model/i);
   });
 });

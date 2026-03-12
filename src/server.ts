@@ -12,6 +12,11 @@ const {
   IS_STREAM,
   ALLOWED_IPS,
   ALLOWED_CORS_ORIGINS,
+  TRUST_PROXY,
+  RATE_LIMIT_WINDOW_MS,
+  RATE_LIMIT_MAX,
+  BODY_SIZE_LIMIT,
+  REQUEST_TIMEOUT_MS,
 } = checkAndReturnEnvVars();
 
 const app = createApp({
@@ -23,20 +28,21 @@ const app = createApp({
   IS_STREAM,
   ALLOWED_IPS,
   ALLOWED_CORS_ORIGINS,
+  TRUST_PROXY,
+  RATE_LIMIT_WINDOW_MS,
+  RATE_LIMIT_MAX,
+  BODY_SIZE_LIMIT,
+  REQUEST_TIMEOUT_MS,
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  logger.info(`Server running on port ${PORT}`);
 });
 
 // For gracefully shutting down the server
 export const closeServer = () => {
   server.close();
 };
-
-app.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`);
-});
 
 process.on('uncaughtException', (error) => {
   logger.error(`Uncaught Exception: ${error}`, error);

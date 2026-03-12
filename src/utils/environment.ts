@@ -16,6 +16,11 @@ export function checkAndReturnEnvVars() {
   const ALLOWED_CORS_ORIGINS: Maybe<string[]> = process.env.ALLOWED_CORS_ORIGINS
     ? process.env.ALLOWED_CORS_ORIGINS.split(',')
     : undefined;
+  const TRUST_PROXY: boolean = process.env.TRUST_PROXY === 'true' || false;
+  const RATE_LIMIT_WINDOW_MS: number = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000');
+  const RATE_LIMIT_MAX: number = parseInt(process.env.RATE_LIMIT_MAX || '100');
+  const BODY_SIZE_LIMIT: string = process.env.BODY_SIZE_LIMIT || '10mb';
+  const REQUEST_TIMEOUT_MS: number = parseInt(process.env.REQUEST_TIMEOUT_MS || '300000');
 
   if (!OLLAMA_URL) {
     logger.error('OLLAMA_URL is required');
@@ -32,5 +37,10 @@ export function checkAndReturnEnvVars() {
     IS_STREAM,
     ALLOWED_IPS,
     ALLOWED_CORS_ORIGINS,
+    TRUST_PROXY,
+    RATE_LIMIT_WINDOW_MS,
+    RATE_LIMIT_MAX,
+    BODY_SIZE_LIMIT,
+    REQUEST_TIMEOUT_MS,
   };
 }

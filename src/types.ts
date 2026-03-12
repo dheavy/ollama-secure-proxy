@@ -9,6 +9,11 @@ export type AppProps = {
   IS_STREAM: boolean;
   ALLOWED_IPS?: Maybe<string[]>;
   ALLOWED_CORS_ORIGINS?: Maybe<string[]>;
+  TRUST_PROXY?: boolean;
+  RATE_LIMIT_WINDOW_MS?: number;
+  RATE_LIMIT_MAX?: number;
+  BODY_SIZE_LIMIT?: string;
+  REQUEST_TIMEOUT_MS?: number;
 };
 export type OllamaRoutesProps = {
   type: 'generate' | 'chat' | 'show' | 'embeddings';
@@ -19,6 +24,7 @@ export type OllamaRoutesProps = {
   defaultModelVersion?: Maybe<string>;
   forceModel?: boolean;
   ipAllowlist?: Maybe<string[]>;
+  requestTimeoutMs?: number;
 };
 
 export type DefaultModelEnforcer = {

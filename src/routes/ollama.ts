@@ -18,6 +18,41 @@ export function validateApiKey(headerApiKey: string, apiKey: string) {
   }
 }
 
+export function validateRequestBody(type: string, body: Record<string, unknown>) {
+  if (!body || typeof body !== 'object') {
+    throw new Error('Request body must be a JSON object');
+  }
+
+  switch (type) {
+    case 'generate':
+      if (!body.model || typeof body.model !== 'string') {
+        throw new Error('Field "model" is required and must be a string');
+      }
+      break;
+    case 'chat':
+      if (!body.model || typeof body.model !== 'string') {
+        throw new Error('Field "model" is required and must be a string');
+      }
+      if (!Array.isArray(body.messages)) {
+        throw new Error('Field "messages" is required and must be an array');
+      }
+      break;
+    case 'show':
+      if (!body.name && !body.model) {
+        throw new Error('Field "name" or "model" is required');
+      }
+      break;
+    case 'embeddings':
+      if (!body.model || typeof body.model !== 'string') {
+        throw new Error('Field "model" is required and must be a string');
+      }
+      if (body.prompt === undefined && body.input === undefined) {
+        throw new Error('Field "prompt" or "input" is required');
+      }
+      break;
+  }
+}
+
 export function streamResponse(
   res: Response,
   body: Maybe<ReadableStream<Uint8Array>>
@@ -54,6 +89,13 @@ export function streamResponse(
   }
 }
 
+function auditLog(event: string, details: Record<string, unknown>) {
+  logger.info(`[AUDIT] ${event}`, {
+    ...details,
+    timestamp: new Date().toISOString(),
+  });
+}
+
 export function route(props: OllamaRoutesProps) {
   const {
     type,
@@ -64,11 +106,17 @@ export function route(props: OllamaRoutesProps) {
     defaultModelVersion,
     forceModel,
     ipAllowlist,
+    requestTimeoutMs = 300000,
   } = props;
 
   const router = express.Router();
 
   return router.post('/', async (req: Request, res: Response) => {
+    const clientIp =
+      (process.env.NODE_ENV === 'test'
+        ? (req.headers['x-test-ip'] as string)
+        : req.ip) || '';
+
     // Validate the API key if it is provided in the environment variables.
     try {
       if (apiKey) {
@@ -76,6 +124,11 @@ export function route(props: OllamaRoutesProps) {
         validateApiKey(headerApiKey, apiKey);
       }
     } catch (error) {
+      auditLog('AUTH_FAILED', {
+        reason: 'invalid_api_key',
+        clientIp,
+        path: `/api/${type}`,
+      });
       return res.status(401).send({
         error: (error as unknown as Error).message || 'Unauthorized',
       });
@@ -84,19 +137,27 @@ export function route(props: OllamaRoutesProps) {
     // Validate IP address if IP allowlist is provided in the environment variables.
     try {
       if (ipAllowlist && ipAllowlist.length > 0) {
-        // `req.ip` cannot be modified during tests, we will pull a `x-test-ip` header during them.
-        const clientIp =
-          (process.env.NODE_ENV === 'test'
-            ? (req.headers['x-test-ip'] as string)
-            : req.ip) || '';
-
         if (!ipAllowlist.includes(clientIp)) {
           throw new Error('Unauthorized');
         }
       }
     } catch (error) {
+      auditLog('AUTH_FAILED', {
+        reason: 'ip_not_allowed',
+        clientIp,
+        path: `/api/${type}`,
+      });
       return res.status(401).send({
         error: (error as unknown as Error).message || 'Unauthorized',
+      });
+    }
+
+    // Validate request body schema before forwarding to Ollama.
+    try {
+      validateRequestBody(type, req.body);
+    } catch (error) {
+      return res.status(400).send({
+        error: (error as unknown as Error).message || 'Bad Request',
       });
     }
 
@@ -111,13 +172,20 @@ export function route(props: OllamaRoutesProps) {
         forceModel: Boolean(forceModel),
       });
 
+      // Abort controller for request timeout.
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+
       const resp = await fetch(`${ollamaServerUrl}/api/${type}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeout);
 
       if (!resp || !resp.status || !resp.text) {
         throw new Error('No response from Ollama API');
@@ -137,10 +205,27 @@ export function route(props: OllamaRoutesProps) {
         throw new Error('No response body');
       }
 
+      auditLog('REQUEST_PROXIED', {
+        clientIp,
+        path: `/api/${type}`,
+        model: req.body?.model,
+      });
+
       // Stream the response if the isStream flag is set,
       // otherwise send the response as JSON.
-      isStream ? streamResponse(res, resp.body) : res.json(await resp.json());
+      if (isStream) {
+        streamResponse(res, resp.body);
+      } else {
+        res.json(await resp.json());
+      }
     } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        logger.error(`Request to Ollama timed out after ${requestTimeoutMs}ms`);
+        return res.status(504).send({
+          error: 'Request to Ollama timed out',
+        });
+      }
+
       logger.error(`Failed to proxy request: ${error}`);
 
       // Extract the status code from the error message possibly coming from the Ollama API.
