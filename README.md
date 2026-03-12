@@ -4,7 +4,7 @@ OSP is a security-hardened reverse proxy for the [Ollama](https://ollama.com) in
 
 ## Why
 
-Ollama's built-in API server has no authentication. Anyone who can reach the port can run inference, list models, or pull new ones. OSP sits in front of Ollama and only exposes a controlled subset of endpoints (`generate`, `chat`, `show`, `embeddings`) with multiple layers of protection. Destructive operations (push, pull, delete) are not proxied.
+Ollama's built-in API server has no authentication. Anyone who can reach the port can run inference, list models, or pull new ones. OSP sits in front of Ollama and only exposes a controlled subset of endpoints (`generate`, `chat`, `embed`, `show`, `tags`, `ps`, `version`) with multiple layers of protection. Destructive operations (push, pull, delete, create, copy) are not proxied.
 
 ## Features
 
@@ -86,15 +86,60 @@ curl -X POST http://localhost:3000/api/generate \
   -d '{"model": "mistral:7b", "prompt": "Why is the sky blue?"}'
 ```
 
+**Chat with tool calling:**
+
+```bash
+curl -X POST http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "mistral:7b",
+    "messages": [{"role": "user", "content": "What is the weather?"}],
+    "tools": [{"type": "function", "function": {"name": "get_weather", "description": "Get weather", "parameters": {"type": "object", "properties": {"location": {"type": "string"}}}}}]
+  }'
+```
+
+**Generate embeddings:**
+
+```bash
+curl -X POST http://localhost:3000/api/embed \
+  -H "Content-Type: application/json" \
+  -d '{"model": "nomic-embed-text", "input": ["hello", "world"]}'
+```
+
+**List available models:**
+
+```bash
+curl http://localhost:3000/api/tags
+```
+
+**List running models:**
+
+```bash
+curl http://localhost:3000/api/ps
+```
+
 ### Supported endpoints
 
-| Endpoint | Required fields |
-|----------|----------------|
-| `POST /api/generate` | `model` |
-| `POST /api/chat` | `model`, `messages` |
-| `POST /api/show` | `name` or `model` |
-| `POST /api/embeddings` | `model`, `prompt` or `input` |
+**POST routes** (inference & model info):
+
+| Endpoint | Required fields | Notes |
+|----------|----------------|-------|
+| `POST /api/generate` | `model` | Text completion. Supports `think`, `format`, `tools`, `logprobs`. |
+| `POST /api/chat` | `model`, `messages` | Chat completion. Supports `tools`, `think`, `format`, `logprobs`. |
+| `POST /api/embed` | `model`, `input` | Generate embeddings. `input` can be a string or array of strings. |
+| `POST /api/show` | `name` or `model` | Model information. Supports `verbose` flag. |
+| `POST /api/embeddings` | — | **Deprecated.** Redirects (307) to `/api/embed`. |
+
+**GET routes** (read-only):
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/tags` | List locally available models |
+| `GET /api/ps` | List currently running/loaded models |
+| `GET /api/version` | Get Ollama server version |
 | `GET /` | Health check (returns 200) |
+
+All endpoints enforce API key authentication, IP allowlisting, and rate limiting when configured.
 
 ### Response codes
 
@@ -104,6 +149,7 @@ curl -X POST http://localhost:3000/api/generate \
 | `400` | Bad request — missing or invalid fields |
 | `401` | Unauthorized — bad or missing API key / IP not allowed |
 | `429` | Too many requests — rate limit exceeded |
+| `307` | Redirect — `/api/embeddings` → `/api/embed` |
 | `504` | Gateway timeout — Ollama didn't respond in time |
 
 ## Development

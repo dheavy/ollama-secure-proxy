@@ -1,34 +1,35 @@
-import { GenerateRequest, DefaultModelEnforcer } from '../types';
+import { OllamaPostRouteType, DefaultModelEnforcer } from '../types';
+
+const STREAMABLE_TYPES: OllamaPostRouteType[] = ['generate', 'chat'];
 
 /**
  * Build the final request body to send to the Ollama API.
- * If a model enforcer is provided, the default model and default model version are overriding the body's model and model version.
- *
- * @param body  The request body.
- * @param isStream
- * @param modelEnforcer
- * @returns
+ * If a model enforcer is provided, the default model and default model version
+ * are overriding the body's model and model version.
+ * The `stream` flag is only injected for endpoint types that support streaming.
  */
 export function buildFinalBody(
-  body: GenerateRequest,
+  body: Record<string, unknown>,
+  type: OllamaPostRouteType,
   isStream: boolean = false,
   modelEnforcer?: DefaultModelEnforcer
 ): string {
+  const supportsStream = STREAMABLE_TYPES.includes(type);
+
+  const base: Record<string, unknown> = { ...body };
+
+  if (supportsStream) {
+    base.stream = isStream;
+  }
+
   if (
     modelEnforcer?.forceModel &&
     modelEnforcer.defaultModel &&
     modelEnforcer.defaultModelVersion
   ) {
-    return JSON.stringify({
-      ...body,
-      model: modelEnforcer.defaultModel,
-      model_version: modelEnforcer.defaultModelVersion,
-      stream: isStream,
-    });
+    base.model = modelEnforcer.defaultModel;
+    base.model_version = modelEnforcer.defaultModelVersion;
   }
 
-  return JSON.stringify({
-    ...body,
-    stream: isStream,
-  });
+  return JSON.stringify(base);
 }
