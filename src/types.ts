@@ -15,14 +15,25 @@ export type AppProps = {
   BODY_SIZE_LIMIT?: string;
   REQUEST_TIMEOUT_MS?: number;
 };
+export type OllamaPostRouteType = 'generate' | 'chat' | 'show' | 'embed';
+export type OllamaGetRouteType = 'tags' | 'ps' | 'version';
+
 export type OllamaRoutesProps = {
-  type: 'generate' | 'chat' | 'show' | 'embeddings';
+  type: OllamaPostRouteType;
   ollamaServerUrl: string;
   isStream: boolean;
   apiKey?: string;
   defaultModel?: Maybe<string>;
   defaultModelVersion?: Maybe<string>;
   forceModel?: boolean;
+  ipAllowlist?: Maybe<string[]>;
+  requestTimeoutMs?: number;
+};
+
+export type OllamaGetRouteProps = {
+  type: OllamaGetRouteType;
+  ollamaServerUrl: string;
+  apiKey?: string;
   ipAllowlist?: Maybe<string[]>;
   requestTimeoutMs?: number;
 };

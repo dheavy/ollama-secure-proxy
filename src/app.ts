@@ -1,4 +1,4 @@
-import { OllamaRoutesProps, AppProps } from './types';
+import { OllamaRoutesProps, OllamaGetRouteProps, AppProps } from './types';
 
 import express from 'express';
 import type { Express } from 'express';
@@ -6,7 +6,7 @@ import bodyParser from 'body-parser';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { requestLogger } from './logging/requestLogger';
-import { route as ollamaRouteGenerator } from './routes/ollama';
+import { route as ollamaRouteGenerator, getRoute as ollamaGetRouteGenerator } from './routes/ollama';
 
 export default function createApp(props: AppProps): Express {
   const {
@@ -53,14 +53,16 @@ export default function createApp(props: AppProps): Express {
   if (process.env.NODE_ENV !== 'test') {
     app.use(requestLogger);
   }
-  const types: Array<OllamaRoutesProps['type']> = [
+
+  // POST routes that proxy to Ollama with body forwarding.
+  const postTypes: Array<OllamaRoutesProps['type']> = [
     'generate',
     'chat',
     'show',
-    'embeddings',
+    'embed',
   ];
 
-  types.forEach((type) => {
+  postTypes.forEach((type) => {
     app.use(
       `/api/${type}`,
       ollamaRouteGenerator({
@@ -75,6 +77,31 @@ export default function createApp(props: AppProps): Express {
         requestTimeoutMs: REQUEST_TIMEOUT_MS,
       })
     );
+  });
+
+  // GET routes that pass through to Ollama (read-only, no body).
+  const getTypes: Array<OllamaGetRouteProps['type']> = [
+    'tags',
+    'ps',
+    'version',
+  ];
+
+  getTypes.forEach((type) => {
+    app.use(
+      `/api/${type}`,
+      ollamaGetRouteGenerator({
+        type: type,
+        ollamaServerUrl: OLLAMA_URL,
+        apiKey: TOKEN,
+        ipAllowlist: ALLOWED_IPS,
+        requestTimeoutMs: REQUEST_TIMEOUT_MS,
+      })
+    );
+  });
+
+  // Backwards compatibility: redirect deprecated /api/embeddings to /api/embed.
+  app.post('/api/embeddings', (req, res) => {
+    res.redirect(307, '/api/embed');
   });
 
   // Use as a health check endpoint.

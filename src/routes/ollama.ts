@@ -1,4 +1,4 @@
-import type { Maybe, OllamaRoutesProps } from '../types';
+import type { Maybe, OllamaRoutesProps, OllamaGetRouteProps } from '../types';
 
 import express from 'express';
 import { Request, Response } from 'express';
@@ -42,12 +42,12 @@ export function validateRequestBody(type: string, body: Record<string, unknown>)
         throw new Error('Field "name" or "model" is required');
       }
       break;
-    case 'embeddings':
+    case 'embed':
       if (!body.model || typeof body.model !== 'string') {
         throw new Error('Field "model" is required and must be a string');
       }
-      if (body.prompt === undefined && body.input === undefined) {
-        throw new Error('Field "prompt" or "input" is required');
+      if (body.input === undefined) {
+        throw new Error('Field "input" is required');
       }
       break;
   }
@@ -93,6 +93,108 @@ function auditLog(event: string, details: Record<string, unknown>) {
   logger.info(`[AUDIT] ${event}`, {
     ...details,
     timestamp: new Date().toISOString(),
+  });
+}
+
+export function getRoute(props: OllamaGetRouteProps) {
+  const {
+    type,
+    ollamaServerUrl,
+    apiKey,
+    ipAllowlist,
+    requestTimeoutMs = 300000,
+  } = props;
+
+  const router = express.Router();
+
+  return router.get('/', async (req: Request, res: Response) => {
+    const clientIp =
+      (process.env.NODE_ENV === 'test'
+        ? (req.headers['x-test-ip'] as string)
+        : req.ip) || '';
+
+    // Validate the API key if it is provided in the environment variables.
+    try {
+      if (apiKey) {
+        const headerApiKey = req.headers[TOKEN_HEADER] as string;
+        validateApiKey(headerApiKey, apiKey);
+      }
+    } catch (error) {
+      auditLog('AUTH_FAILED', {
+        reason: 'invalid_api_key',
+        clientIp,
+        path: `/api/${type}`,
+      });
+      return res.status(401).send({
+        error: (error as unknown as Error).message || 'Unauthorized',
+      });
+    }
+
+    // Validate IP address if IP allowlist is provided in the environment variables.
+    try {
+      if (ipAllowlist && ipAllowlist.length > 0) {
+        if (!ipAllowlist.includes(clientIp)) {
+          throw new Error('Unauthorized');
+        }
+      }
+    } catch (error) {
+      auditLog('AUTH_FAILED', {
+        reason: 'ip_not_allowed',
+        clientIp,
+        path: `/api/${type}`,
+      });
+      return res.status(401).send({
+        error: (error as unknown as Error).message || 'Unauthorized',
+      });
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+
+      const resp = await fetch(`${ollamaServerUrl}/api/${type}`, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!resp || !resp.status) {
+        throw new Error('No response from Ollama API');
+      }
+
+      if (resp.status >= 400) {
+        throw new Error(`${resp.status}: ${await resp.text()}`);
+      }
+
+      auditLog('REQUEST_PROXIED', {
+        clientIp,
+        path: `/api/${type}`,
+      });
+
+      res.setHeader(
+        'Content-Type',
+        resp.headers.get('content-type') || 'application/json'
+      );
+      res.json(await resp.json());
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        logger.error(`Request to Ollama timed out after ${requestTimeoutMs}ms`);
+        return res.status(504).send({
+          error: 'Request to Ollama timed out',
+        });
+      }
+
+      logger.error(`Failed to proxy request: ${error}`);
+
+      const errorMessage =
+        (error as unknown as Error).message || 'Internal Server Error';
+      const statusCode = Number(errorMessage.match(/\d{3}/)?.[0] || 500);
+
+      res.status(statusCode).send({
+        error: errorMessage,
+      });
+    }
   });
 }
 
