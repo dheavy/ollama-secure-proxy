@@ -1,4 +1,4 @@
-import { Maybe, GenerateRequest, DefaultModelEnforcer } from '../types';
+import { GenerateRequest, DefaultModelEnforcer } from '../types';
 
 /**
  * Build the final request body to send to the Ollama API.
