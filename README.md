@@ -1,99 +1,124 @@
 # OSP - Ollama Secure Proxy
 
-OSP acts as a secure proxy for the Ollama inference server, enhancing the standard API with additional security features suitable for web-based LLM applications.
+OSP is a security-hardened reverse proxy for the [Ollama](https://ollama.com) inference server. It wraps Ollama's API with authentication, authorization, rate limiting, and request validation — making it safe to expose to client-side applications.
 
-## About
+## Why
 
-While Ollama's default inference server (`api/generate`) is openly accessible, OSP adds crucial security layers to it, including CORS policy management, IP allow-listing, and access tokens. OSP handles API requests for generating completions, chatting, embedding generation, and displaying model information. Direct model manipulation (push, pull, delete) through OSP is not supported to enhance security.
+Ollama's built-in API server has no authentication. Anyone who can reach the port can run inference, list models, or pull new ones. OSP sits in front of Ollama and only exposes a controlled subset of endpoints (`generate`, `chat`, `show`, `embeddings`) with multiple layers of protection. Destructive operations (push, pull, delete) are not proxied.
 
-## Installation
+## Features
 
-First, create a `.env` file based on the provided template:
+- **API key authentication** — require an `x-osp-token` header on every request
+- **IP allowlisting** — restrict access to specific client IPs
+- **CORS policy** — control which origins can call the API
+- **Rate limiting** — prevent brute force and denial-of-service attacks
+- **Request body size limits** — guard against oversized payloads
+- **Request timeouts** — abort long-running inference calls that hang
+- **Input validation** — reject malformed requests before they reach Ollama
+- **Model enforcement** — optionally lock all requests to a single model
+- **Streaming support** — toggle between streaming and JSON responses
+- **Audit logging** — structured logs for auth failures and proxied requests with sensitive header redaction
+- **Reverse proxy support** — `trust proxy` mode for correct IP resolution behind load balancers
+
+## Quick start
 
 ```bash
-cp .env.example .env
-```
-
-Update the `.env` file with the URL of your Ollama server:
-
-```plaintext
-OLLAMA_URL=http://localhost:11434
-```
-
-Install dependencies:
-
-```bash
+# 1. Clone and install
+git clone https://github.com/dheavy/ollama-secure-proxy.git
+cd ollama-secure-proxy
 npm install
+
+# 2. Configure
+cp .env.example .env
+# Edit .env — at minimum set OLLAMA_URL
+
+# 3. Run
+npm run dev        # development (ts-node + nodemon)
+npm run build      # compile to ./dist
+npm start          # production (runs ./dist/server.js)
 ```
 
-Execute tests:
+## Configuration
 
-```bash
-npm run test
-```
+All configuration is done via environment variables (or a `.env` file).
 
-Build for deployment or start the development server:
-
-```bash
-npm run build    # Compiles to ./dist
-npm run dev      # Starts development server
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Port OSP listens on |
+| `OLLAMA_URL` | — | **Required.** URL of the Ollama server (e.g. `http://localhost:11434`) |
+| `TOKEN` | — | API key clients must send in the `x-osp-token` header. If unset, auth is disabled. |
+| `ALLOWED_IPS` | — | Comma-separated IP allowlist (e.g. `127.0.0.1,10.0.0.5`). If unset, all IPs are allowed. |
+| `ALLOWED_CORS_ORIGINS` | — | Comma-separated allowed origins (e.g. `https://app.example.com`). If unset, all origins are allowed. |
+| `DEFAULT_MODEL` | — | Default model name to use when not specified in the request |
+| `DEFAULT_MODEL_VERSION` | — | Default model version |
+| `FORCE_MODEL` | `false` | When `true`, overrides the model in every request with `DEFAULT_MODEL` |
+| `IS_STREAM` | `false` | When `true`, streams responses from Ollama instead of buffering |
+| `TRUST_PROXY` | `false` | Set to `true` when behind a reverse proxy so `req.ip` reads `X-Forwarded-For` |
+| `RATE_LIMIT_WINDOW_MS` | `900000` | Rate limit window in milliseconds (default: 15 minutes) |
+| `RATE_LIMIT_MAX` | `100` | Maximum requests per window per IP |
+| `BODY_SIZE_LIMIT` | `10mb` | Maximum request body size |
+| `REQUEST_TIMEOUT_MS` | `300000` | Timeout for requests to Ollama in milliseconds (default: 5 minutes) |
 
 ## Usage
 
-### Setting Up Ollama
-
-Start the Ollama server using:
+### Start Ollama
 
 ```bash
-ollama run <model>
+ollama run mistral:7b
 ```
 
-### Configuring and Running OSP
+### Send requests through OSP
 
-1. **Environment Setup:**
-   Set `OLLAMA_URL` to point to your running Ollama server. Configure the `TOKEN` for securing requests with an access token.
-
-2. **Secure Requests:**
-   Use the `x-osp-token` header for secure access:
+**Without authentication:**
 
 ```bash
-curl -X POST http://localhost:3456/api/generate \
--H "Content-Type: application/json" \
--H "x-osp-token: secret" \
--d '{"model": "mistral:7b", "prompt": "Why is the sky blue?"}'
+curl -X POST http://localhost:3000/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"model": "mistral:7b", "prompt": "Why is the sky blue?"}'
 ```
 
-3. **IP Restriction:**
-   Limit access by setting `ALLOWED_IPS` with a single IP or a list of IPs.
+**With API key:**
 
-4. **CORS Configuration:**
-   Restrict cross-origin requests by specifying allowed origins in `ALLOWED_CORS_ORIGINS`.
+```bash
+curl -X POST http://localhost:3000/api/generate \
+  -H "Content-Type: application/json" \
+  -H "x-osp-token: your-secret-token" \
+  -d '{"model": "mistral:7b", "prompt": "Why is the sky blue?"}'
+```
 
-5. **Running OSP:**
-   After configuration, build and run OSP to start handling requests securely.
+### Supported endpoints
 
-### Advanced Options
+| Endpoint | Required fields |
+|----------|----------------|
+| `POST /api/generate` | `model` |
+| `POST /api/chat` | `model`, `messages` |
+| `POST /api/show` | `name` or `model` |
+| `POST /api/embeddings` | `model`, `prompt` or `input` |
+| `GET /` | Health check (returns 200) |
 
-- **Streaming Responses:**
-  Toggle response streaming with `IS_STREAM`.
+### Response codes
 
-- **Model Enforcement:**
-  Set a default model and version with `DEFAULT_MODEL` and `DEFAULT_MODEL_VERSION`, and enforce them using `FORCE_MODEL`.
+| Code | Meaning |
+|------|---------|
+| `200` | Success |
+| `400` | Bad request — missing or invalid fields |
+| `401` | Unauthorized — bad or missing API key / IP not allowed |
+| `429` | Too many requests — rate limit exceeded |
+| `504` | Gateway timeout — Ollama didn't respond in time |
+
+## Development
+
+```bash
+npm run dev          # Start with hot reload
+npm test             # Run tests
+npm run test:watch   # Run tests in watch mode
+npm run lint         # Lint with ESLint
+npm run build        # Compile TypeScript to ./dist
+```
 
 ## Contributing
 
-Thank you for your interest in contributing to OSP! Here's how you can help:
-
-1. **Issue Reporting:** Identify bugs or propose new features by creating an issue in our repository.
-
-2. **Pull Requests:** Submit pull requests with bug fixes or new functionality. Ensure you adhere to our coding standards and include tests where applicable.
-
-3. **Code Reviews:** Participate in code reviews to discuss and improve the codebase.
-
-4. **Documentation:** Help us improve the documentation by suggesting changes or writing additional content.
-
-Please read the CONTRIBUTING.md file for more details on our code of conduct and the process for submitting pull requests to us.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on reporting issues, submitting pull requests, and coding standards.
 
 ## License
 
