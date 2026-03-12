@@ -443,4 +443,146 @@ describe('input validation', () => {
     expect(response.status).toBe(400);
     expect(response.body.error).toMatch(/name|model/i);
   });
+
+  it('should return 400 for chat with invalid message role', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const response = await request(app)
+      .post('/api/chat')
+      .send({ model: 'llama2', messages: [{ role: 'invalid', content: 'hi' }] });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/role/i);
+  });
+
+  it('should return 400 for chat with non-array tools', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const response = await request(app)
+      .post('/api/chat')
+      .send({ model: 'llama2', messages: [{ role: 'user', content: 'hi' }], tools: 'not-array' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/tools/i);
+  });
+
+  it('should accept chat with tool role messages', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const response = await request(app)
+      .post('/api/chat')
+      .send({ model: 'llama2', messages: [{ role: 'tool', content: 'result' }] });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('should return 400 for invalid think value', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const response = await request(app)
+      .post('/api/generate')
+      .send({ model: 'llama2', prompt: 'hello', think: 'invalid' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/think/i);
+  });
+
+  it('should accept valid think values', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    for (const think of [true, false, 'high', 'medium', 'low']) {
+      const response = await request(app)
+        .post('/api/generate')
+        .send({ model: 'llama2', prompt: 'hello', think });
+
+      expect(response.status).toBe(200);
+    }
+  });
+
+  it('should return 400 for invalid format value', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const response = await request(app)
+      .post('/api/generate')
+      .send({ model: 'llama2', prompt: 'hello', format: 123 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/format/i);
+  });
+
+  it('should accept format as "json" or a schema object', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const jsonRes = await request(app)
+      .post('/api/generate')
+      .send({ model: 'llama2', prompt: 'hello', format: 'json' });
+    expect(jsonRes.status).toBe(200);
+
+    const schemaRes = await request(app)
+      .post('/api/generate')
+      .send({ model: 'llama2', prompt: 'hello', format: { type: 'object', properties: {} } });
+    expect(schemaRes.status).toBe(200);
+  });
+
+  it('should return 400 for embed with invalid input type', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const response = await request(app)
+      .post('/api/embed')
+      .send({ model: 'llama2', input: 123 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/input/i);
+  });
+
+  it('should accept embed with array input', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const response = await request(app)
+      .post('/api/embed')
+      .send({ model: 'llama2', input: ['hello', 'world'] });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('should return 400 for show with non-boolean verbose', async () => {
+    app = createApp({
+      OLLAMA_URL: 'http://localhost:11434',
+      IS_STREAM: false,
+    });
+
+    const response = await request(app)
+      .post('/api/show')
+      .send({ name: 'llama2', verbose: 'yes' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/verbose/i);
+  });
 });

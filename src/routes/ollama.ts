@@ -18,6 +18,38 @@ export function validateApiKey(headerApiKey: string, apiKey: string) {
   }
 }
 
+const VALID_CHAT_ROLES = ['system', 'user', 'assistant', 'tool'];
+const VALID_THINK_VALUES = [true, false, 'high', 'medium', 'low'];
+
+function validateModel(body: Record<string, unknown>) {
+  if (!body.model || typeof body.model !== 'string') {
+    throw new Error('Field "model" is required and must be a string');
+  }
+}
+
+function validateFormat(body: Record<string, unknown>) {
+  if (body.format !== undefined && body.format !== 'json' && typeof body.format !== 'object') {
+    throw new Error('Field "format" must be "json" or a JSON schema object');
+  }
+}
+
+function validateThink(body: Record<string, unknown>) {
+  if (body.think !== undefined && !VALID_THINK_VALUES.includes(body.think as string | boolean)) {
+    throw new Error('Field "think" must be a boolean or one of "high", "medium", "low"');
+  }
+}
+
+function validateOptionalFields(body: Record<string, unknown>) {
+  validateFormat(body);
+  validateThink(body);
+  if (body.keep_alive !== undefined && typeof body.keep_alive !== 'string' && typeof body.keep_alive !== 'number') {
+    throw new Error('Field "keep_alive" must be a string or number');
+  }
+  if (body.options !== undefined && (typeof body.options !== 'object' || body.options === null)) {
+    throw new Error('Field "options" must be an object');
+  }
+}
+
 export function validateRequestBody(type: string, body: Record<string, unknown>) {
   if (!body || typeof body !== 'object') {
     throw new Error('Request body must be a JSON object');
@@ -25,29 +57,55 @@ export function validateRequestBody(type: string, body: Record<string, unknown>)
 
   switch (type) {
     case 'generate':
-      if (!body.model || typeof body.model !== 'string') {
-        throw new Error('Field "model" is required and must be a string');
+      validateModel(body);
+      validateOptionalFields(body);
+      if (body.images !== undefined && !Array.isArray(body.images)) {
+        throw new Error('Field "images" must be an array');
       }
       break;
-    case 'chat':
-      if (!body.model || typeof body.model !== 'string') {
-        throw new Error('Field "model" is required and must be a string');
-      }
+    case 'chat': {
+      validateModel(body);
       if (!Array.isArray(body.messages)) {
         throw new Error('Field "messages" is required and must be an array');
       }
+      for (const msg of body.messages as Array<Record<string, unknown>>) {
+        if (!msg.role || !VALID_CHAT_ROLES.includes(msg.role as string)) {
+          throw new Error(`Field "messages[].role" must be one of: ${VALID_CHAT_ROLES.join(', ')}`);
+        }
+      }
+      if (body.tools !== undefined && !Array.isArray(body.tools)) {
+        throw new Error('Field "tools" must be an array');
+      }
+      validateOptionalFields(body);
       break;
+    }
     case 'show':
       if (!body.name && !body.model) {
         throw new Error('Field "name" or "model" is required');
       }
+      if (body.verbose !== undefined && typeof body.verbose !== 'boolean') {
+        throw new Error('Field "verbose" must be a boolean');
+      }
       break;
     case 'embed':
-      if (!body.model || typeof body.model !== 'string') {
-        throw new Error('Field "model" is required and must be a string');
-      }
+      validateModel(body);
       if (body.input === undefined) {
         throw new Error('Field "input" is required');
+      }
+      if (typeof body.input !== 'string' && !Array.isArray(body.input)) {
+        throw new Error('Field "input" must be a string or an array of strings');
+      }
+      if (body.truncate !== undefined && typeof body.truncate !== 'boolean') {
+        throw new Error('Field "truncate" must be a boolean');
+      }
+      if (body.dimensions !== undefined && typeof body.dimensions !== 'number') {
+        throw new Error('Field "dimensions" must be a number');
+      }
+      if (body.keep_alive !== undefined && typeof body.keep_alive !== 'string' && typeof body.keep_alive !== 'number') {
+        throw new Error('Field "keep_alive" must be a string or number');
+      }
+      if (body.options !== undefined && (typeof body.options !== 'object' || body.options === null)) {
+        throw new Error('Field "options" must be an object');
       }
       break;
   }
@@ -268,7 +326,7 @@ export function route(props: OllamaRoutesProps) {
 
     try {
       // Build request body based on the incoming request.
-      const body = buildFinalBody(req.body, isStream, {
+      const body = buildFinalBody(req.body, type, isStream, {
         defaultModel,
         defaultModelVersion,
         forceModel: Boolean(forceModel),
