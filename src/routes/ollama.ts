@@ -247,7 +247,7 @@ export function getRoute(props: OllamaGetRouteProps) {
 
       const errorMessage =
         (error as unknown as Error).message || 'Internal Server Error';
-      const statusCode = Number(errorMessage.match(/\d{3}/)?.[0] || 500);
+      const statusCode = Number(errorMessage.match(/^(\d{3}):/)?.[1] || 500);
 
       res.status(statusCode).send({
         error: errorMessage,
@@ -391,7 +391,7 @@ export function route(props: OllamaRoutesProps) {
       // Extract the status code from the error message possibly coming from the Ollama API.
       const errorMessage =
         (error as unknown as Error).message || 'Internal Server Error';
-      const statusCode = Number(errorMessage.match(/\d{3}/)?.[0] || 500);
+      const statusCode = Number(errorMessage.match(/^(\d{3}):/)?.[1] || 500);
 
       res.status(statusCode).send({
         error: errorMessage,
