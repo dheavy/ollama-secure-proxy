@@ -35,14 +35,35 @@ const app = createApp({
   REQUEST_TIMEOUT_MS,
 });
 
+const SHUTDOWN_TIMEOUT_MS = 30000;
+
 const server = app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
 });
 
-// For gracefully shutting down the server
+// For programmatic shutdown (e.g. tests).
 export const closeServer = () => {
   server.close();
 };
+
+function gracefulShutdown(signal: string) {
+  logger.info(`${signal} received, shutting down gracefully...`);
+
+  // Stop accepting new connections.
+  server.close(() => {
+    logger.info('All connections closed. Exiting.');
+    process.exit(0);
+  });
+
+  // Force exit if connections don't close in time.
+  setTimeout(() => {
+    logger.error(`Shutdown timed out after ${SHUTDOWN_TIMEOUT_MS}ms, forcing exit.`);
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS).unref();
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 process.on('uncaughtException', (error) => {
   logger.error(`Uncaught Exception: ${error}`, error);
